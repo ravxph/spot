@@ -1,0 +1,343 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Side-by-Side Image Compare with Pointer Zoom</title>
+  <style>
+    :root {
+      --bg: #0f1115;
+      --panel: #171a21;
+      --text: #e9ecf1;
+      --muted: #9aa3b2;
+      --accent: #4ea1ff;
+      --border: #2a3140;
+      --zoom: 2.25;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: Inter, Segoe UI, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    .app {
+      max-width: 1400px;
+      margin: 24px auto;
+      padding: 0 16px 20px;
+    }
+
+    .toolbar {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .zoom-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 14px;
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 8px 14px;
+    }
+
+    .zoom-row label {
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    .zoom-row input[type="range"] {
+      flex: 1;
+      accent-color: var(--accent);
+    }
+
+    .zoom-row input[type="number"] {
+      width: 62px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      color: var(--text);
+      font-size: 14px;
+      padding: 3px 7px;
+      text-align: right;
+    }
+
+    .uploader {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-height: 52px;
+    }
+
+    .uploader label {
+      color: var(--muted);
+      font-size: 14px;
+      white-space: nowrap;
+    }
+
+    input[type="file"] {
+      color: var(--text);
+      width: 100%;
+    }
+
+    .status {
+      margin: 8px 2px 14px;
+      color: var(--muted);
+      font-size: 13px;
+      min-height: 18px;
+    }
+
+    .compare {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .frame {
+      position: relative;
+      background: #0c0f14;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      height: min(72vh, 820px);
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .hint {
+      position: absolute;
+      inset: auto 10px 10px auto;
+      background: rgba(0, 0, 0, 0.45);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: #d5dbe6;
+      font-size: 12px;
+      border-radius: 999px;
+      padding: 4px 10px;
+      pointer-events: none;
+      opacity: 0.9;
+    }
+
+    .img-wrap {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      cursor: crosshair;
+      background:
+        linear-gradient(45deg, #121622 25%, transparent 25%) 0 0 / 18px 18px,
+        linear-gradient(-45deg, #121622 25%, transparent 25%) 0 0 / 18px 18px,
+        linear-gradient(45deg, transparent 75%, #121622 75%) 0 0 / 18px 18px,
+        linear-gradient(-45deg, transparent 75%, #121622 75%) 0 0 / 18px 18px;
+    }
+
+    .img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      transform-origin: 50% 50%;
+      transition: transform 60ms linear;
+      user-select: none;
+      -webkit-user-drag: none;
+      pointer-events: none;
+    }
+
+    .img-wrap.zoom img {
+      transform: scale(var(--zoom));
+    }
+
+    .placeholder {
+      color: var(--muted);
+      font-size: 14px;
+      text-align: center;
+      padding: 0 24px;
+    }
+
+    .badge {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      background: rgba(78, 161, 255, 0.18);
+      border: 1px solid rgba(78, 161, 255, 0.55);
+      color: #cfe5ff;
+      font-size: 12px;
+      border-radius: 999px;
+      padding: 4px 10px;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="toolbar">
+      <div class="uploader">
+        <label for="leftInput">Left image</label>
+        <input id="leftInput" type="file" accept="image/*" />
+      </div>
+      <div class="uploader">
+        <label for="rightInput">Right image</label>
+        <input id="rightInput" type="file" accept="image/*" />
+      </div>
+    </section>
+
+    <div class="zoom-row">
+      <label for="zoomRange">Zoom</label>
+      <input id="zoomRange" type="range" min="1.25" max="8" step="0.25" value="2.25" />
+      <input id="zoomNumber" type="number" min="1.25" max="8" step="0.25" value="2.25" />
+    </div>
+
+    <div id="status" class="status">Load two images to compare.</div>
+
+    <section class="compare">
+      <article class="frame">
+        <div class="badge">Left</div>
+        <div id="leftWrap" class="img-wrap">
+          <img id="leftImg" alt="Left comparison image" hidden />
+          <div id="leftPlaceholder" class="placeholder">Select the left image.</div>
+        </div>
+        <div class="hint">Hover to zoom</div>
+      </article>
+
+      <article class="frame">
+        <div class="badge">Right</div>
+        <div id="rightWrap" class="img-wrap">
+          <img id="rightImg" alt="Right comparison image" hidden />
+          <div id="rightPlaceholder" class="placeholder">Select the right image.</div>
+        </div>
+        <div class="hint">Hover to zoom</div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const leftInput = document.getElementById("leftInput");
+    const rightInput = document.getElementById("rightInput");
+    const leftImg = document.getElementById("leftImg");
+    const rightImg = document.getElementById("rightImg");
+    const leftWrap = document.getElementById("leftWrap");
+    const rightWrap = document.getElementById("rightWrap");
+    const leftPlaceholder = document.getElementById("leftPlaceholder");
+    const rightPlaceholder = document.getElementById("rightPlaceholder");
+    const statusEl = document.getElementById("status");
+    const zoomRange = document.getElementById("zoomRange");
+    const zoomNumber = document.getElementById("zoomNumber");
+
+    function applyZoom(val) {
+      const v = Math.min(8, Math.max(1.25, parseFloat(val) || 2.25));
+      document.documentElement.style.setProperty("--zoom", v);
+      zoomRange.value = v;
+      zoomNumber.value = v;
+    }
+
+    zoomRange.addEventListener("input", () => applyZoom(zoomRange.value));
+    zoomNumber.addEventListener("change", () => applyZoom(zoomNumber.value));
+
+    let leftMeta = null;
+    let rightMeta = null;
+
+    function setStatus(msg, isError = false) {
+      statusEl.textContent = msg;
+      statusEl.style.color = isError ? "#ff7d7d" : "var(--muted)";
+    }
+
+    function readImage(file) {
+      return new Promise((resolve, reject) => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => resolve({ url, width: img.naturalWidth, height: img.naturalHeight });
+        img.onerror = () => reject(new Error("Invalid image file."));
+        img.src = url;
+      });
+    }
+
+    function sameSize(a, b) {
+      return a && b && a.width === b.width && a.height === b.height;
+    }
+
+    function updateSizeStatus() {
+      if (!leftMeta || !rightMeta) {
+        setStatus("Load two images to compare.");
+        return;
+      }
+      if (sameSize(leftMeta, rightMeta)) {
+        setStatus(`Images loaded: ${leftMeta.width}×${leftMeta.height}.`);
+      } else {
+        setStatus(`Left: ${leftMeta.width}×${leftMeta.height}, Right: ${rightMeta.width}×${rightMeta.height}.`);
+      }
+    }
+
+    async function handleLoad(side, input, imgEl, placeholderEl) {
+      const file = input.files?.[0];
+      if (!file) return;
+
+      try {
+        const meta = await readImage(file);
+
+        if (side === "left") {
+          if (leftMeta?.url) URL.revokeObjectURL(leftMeta.url);
+          leftMeta = meta;
+        } else {
+          if (rightMeta?.url) URL.revokeObjectURL(rightMeta.url);
+          rightMeta = meta;
+        }
+
+        imgEl.src = meta.url;
+        imgEl.hidden = false;
+        placeholderEl.hidden = true;
+        updateSizeStatus();
+      } catch {
+        setStatus("Failed to load image.", true);
+      }
+    }
+
+    function setZoomOrigin(img, x, y) {
+      img.style.transformOrigin = `${x}% ${y}%`;
+    }
+
+    function attachZoom(wrap, img, otherWrap, otherImg) {
+      wrap.addEventListener("mouseenter", () => {
+        if (img.hidden) return;
+        wrap.classList.add("zoom");
+        if (!otherImg.hidden) otherWrap.classList.add("zoom");
+      });
+
+      wrap.addEventListener("mouseleave", () => {
+        wrap.classList.remove("zoom");
+        img.style.transformOrigin = "50% 50%";
+        otherWrap.classList.remove("zoom");
+        otherImg.style.transformOrigin = "50% 50%";
+      });
+
+      wrap.addEventListener("mousemove", (e) => {
+        if (img.hidden) return;
+        const rect = wrap.getBoundingClientRect();
+        const x = ((e.clientX - rect.left) / rect.width) * 100;
+        const y = ((e.clientY - rect.top) / rect.height) * 100;
+        setZoomOrigin(img, x, y);
+        if (!otherImg.hidden) setZoomOrigin(otherImg, x, y);
+      });
+    }
+
+    leftInput.addEventListener("change", () =>
+      handleLoad("left", leftInput, leftImg, leftPlaceholder)
+    );
+    rightInput.addEventListener("change", () =>
+      handleLoad("right", rightInput, rightImg, rightPlaceholder)
+    );
+
+    attachZoom(leftWrap, leftImg, rightWrap, rightImg);
+    attachZoom(rightWrap, rightImg, leftWrap, leftImg);
+  </script>
+</body>
+</html>
